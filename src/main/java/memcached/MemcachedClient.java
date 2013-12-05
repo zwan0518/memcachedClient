@@ -11,6 +11,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.Vector;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import com.whalin.MemCached.MemCachedClient;
@@ -35,12 +36,16 @@ public class MemcachedClient extends DB {
 	}
 
 	private static final boolean isload;
+	private static final String[] servers;
+	/*
 	private static final String mem_host;
 	private static final String mem_port;
 	private static final String db_host;
 	private static final String db_port;
 	private static final String db_name;
 	private static final String db_url_pref = "jdbc:mysql://";
+	*/
+	
 	private static int read_fail = 0;
 
 	private static final String CONST_STRING;
@@ -54,6 +59,15 @@ public class MemcachedClient extends DB {
 			isload = Boolean.parseBoolean(p.getProperty("isload"));
 			String mem = p.getProperty("memcached");
 
+			JSONArray array = new JSONArray(mem);
+			servers = new String[array.length()];
+			for (int i = 0; i < array.length(); i++) {
+				JSONObject json = new JSONObject(array.getString(i));
+				String mem_host = json.getString("ip");
+				String mem_port = json.getString("port");
+				servers[i] = mem_host + ":" + mem_port;
+			}
+			/*
 			JSONObject json = new JSONObject(mem);
 			mem_host = json.getString("ip");
 			mem_port = json.getString("port");
@@ -68,7 +82,8 @@ public class MemcachedClient extends DB {
 			for (int i = 0; i < 2025; i++) {
 				chs[i] = 'Y';
 			}
-//			CONST_STRING = new String(chs);
+			CONST_STRING = new String(chs);
+			 */
 			CONST_STRING = "abcd";
 		} catch (Exception e) {
 			throw new RuntimeException("Failed to init app configuration", e);
@@ -84,7 +99,7 @@ public class MemcachedClient extends DB {
 	}
 
 	private void initMySQL() {
-		if (!isload) {
+		/*if (!isload) {
 			// System.out.println("this time needn't init mysql.");
 		}
 		try {
@@ -97,11 +112,10 @@ public class MemcachedClient extends DB {
 			e.printStackTrace();
 		} catch (SQLException e) {
 			e.printStackTrace();
-		}
+		}*/
 	}
 
 	private void initMemcache() {
-		String[] servers = { mem_host + ":" + mem_port };
 		SockIOPool pool = SockIOPool.getInstance();
 		pool.setServers(servers);
 		pool.initialize();
