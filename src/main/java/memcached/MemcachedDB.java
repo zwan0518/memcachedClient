@@ -6,109 +6,53 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.HashMap;
-import java.util.Properties;
 import java.util.Set;
-import java.util.Vector;
 import java.util.concurrent.TimeoutException;
 
 import net.rubyeye.xmemcached.MemcachedClient;
 import net.rubyeye.xmemcached.MemcachedClientBuilder;
 import net.rubyeye.xmemcached.XMemcachedClientBuilder;
+import net.rubyeye.xmemcached.command.BinaryCommandFactory;
 import net.rubyeye.xmemcached.exception.MemcachedException;
 import net.rubyeye.xmemcached.utils.AddrUtil;
 
-import org.json.JSONArray;
-import org.json.JSONObject;
-
 import com.yahoo.ycsb.ByteIterator;
-import com.yahoo.ycsb.DB;
 import com.yahoo.ycsb.RandomByteIterator;
 import com.yahoo.ycsb.generator.CounterGenerator;
 
-public class MemcachedDB extends DB {
-	enum Status {
-		SUCCESS(0), FAIL(-1), EXCEPTION(-2);
-		int status;
+public class MemcachedDB extends AbstractClient {
 
-		private Status(int status) {
-			this.status = status;
-		}
-
-		public int getValue() {
-			return status;
-		}
-	}
-
-	private static final boolean isload;
-	private static final String[] servers;
-	// private static final String db_host;
-	// private static final String db_port;
-	// private static final String db_name;
-	// private static final String db_url_pref = "jdbc:mysql://";
-	private static int read_fail = 0;
-
-	private static final String CONST_STRING;
-	private static final int EXPIRE = 32768;
+	private int read_fail = 0;
 	private Connection _connection;
 	private MemcachedClient _client;
-	static {
-		try {
-			Properties p = new Properties();
-			System.out.println("loader" + MemcachedDB.class.getClassLoader());
-			p.load(MemcachedDB.class.getClassLoader().getResourceAsStream("memcached/connect.properties"));
-			isload = Boolean.parseBoolean(p.getProperty("isload"));
-			String mem = p.getProperty("memcached");
-			System.err.println(mem);
-			JSONArray array = new JSONArray(mem);
-			servers = new String[array.length()];
-			for (int i = 0; i < array.length(); i++) {
-				JSONObject json = new JSONObject(array.getString(i));
-				String mem_host = json.getString("ip");
-				String mem_port = json.getString("port");
-				servers[i] = mem_host + ":" + mem_port;
-			}
 
-			CONST_STRING = "abcd";
-			// for a long value test
-			// char[] chs = new char[4004];
-			// for (int i = 0; i < 2025; i++) {
-			// chs[i] = 'Y';
-			// }
-			// CONST_STRING = new String(chs);
-		} catch (Exception e) {
-			throw new RuntimeException("Failed to init app configuration", e);
-		}
-	}
-
-	@Override
 	public void init() {
 		initMemcache();
 
-		if (isload) {
+		if (isload()) {
 			initMySQL();
 			loadData();
 		}
 	}
 
 	private void initMySQL() {
-
-//		try {
-//			Class.forName("com.mysql.jdbc.Driver");
-//			String db_url = db_url_pref + db_host + ":" + db_port + "/"
-//					+ db_name;
-//			_connection = DriverManager.getConnection(db_url, "root",
-//					"c,123456");
-//		} catch (ClassNotFoundException e) {
-//			e.printStackTrace();
-//		} catch (SQLException e) {
-//			e.printStackTrace();
-//		}
+		// try {
+		// Class.forName("com.mysql.jdbc.Driver");
+		// String db_url = db_url_pref + db_host + ":" + db_port + "/"
+		// + db_name;
+		// _connection = DriverManager.getConnection(db_url, "root",
+		// "c,123456");
+		// } catch (ClassNotFoundException e) {
+		// e.printStackTrace();
+		// } catch (SQLException e) {
+		// e.printStackTrace();
+		// }
 
 	}
 
 	private void initMemcache() {
 		String server = "";
-		for (String s : servers) {
+		for (String s : getServers()) {
 			server += s + " ";
 		}
 
@@ -116,13 +60,12 @@ public class MemcachedDB extends DB {
 				AddrUtil.getAddresses(server));
 
 		try {
+			builder.setCommandFactory(new BinaryCommandFactory());
 			_client = builder.build();
 		} catch (IOException e) {
 			System.err.println("init memcached failed!!!");
 			System.err.println(e);
 		}
-		// System.out.println("init success:");
-		// System.out.println("server:" + server);
 	}
 
 	private void loadData() {
@@ -149,7 +92,7 @@ public class MemcachedDB extends DB {
 					String key = rs.getString(1);
 					String value = rs.getString(2);
 					try {
-						_client.add(key, EXPIRE, value);
+						_client.add(key, getExpire(), value);
 					} catch (Exception e) {
 						e.printStackTrace();
 					}
@@ -172,11 +115,10 @@ public class MemcachedDB extends DB {
 			String v = get(key);
 			if (v == null) {
 				System.err.println("k:" + key);
-				read_fail ++;
+				read_fail++;
 				System.err.println("read_fail:" + read_fail);
 				return Status.FAIL.getValue();
 			}
-			// System.out.println("k:" + key + ", v:" + v);
 			return Status.SUCCESS.getValue();
 		} catch (Exception e) {
 			System.out.println("Error in processing read of key " + table
@@ -186,34 +128,22 @@ public class MemcachedDB extends DB {
 	}
 
 	@Override
-	public int scan(String table, String startkey, int recordcount,
-			Set<String> fields, Vector<HashMap<String, ByteIterator>> result) {
-		return 0;
-	}
-
-	@Override
-	public int update(String table, String key,
-			HashMap<String, ByteIterator> values) {
-		return 0;
-	}
-
 	public int insert(String table, String key,
 			HashMap<String, ByteIterator> values) {
 
 		if (_client == null) {
 			System.out.println("the _client is not inited !!!");
 		}
-		// System.out.println("key: " + key);
-		// System.out.println("key: " + key.length());
-		// System.out.println("value: " + CONST_STRING);
 		boolean flag = false;
 		try {
-			if(_client.get(key) != null){
+			if (_client.get(key) != null) {
 				System.out.println(_client.get(key));
+				System.out.println(_client.isShutdown());
+				_client.shutdown();
+				System.out.println(_client.isShutdown());
 				return 0;
 			}
-			
-			flag = _client.add(key, EXPIRE, CONST_STRING);
+			flag = _client.add(key, getExpire(), getConstString());
 		} catch (Exception e) {
 			System.err.println("insert failed " + key + ":" + values);
 			System.err.println(e);
