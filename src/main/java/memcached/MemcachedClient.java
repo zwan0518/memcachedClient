@@ -2,133 +2,58 @@ package memcached;
 
 import java.io.IOException;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.HashMap;
-import java.util.Properties;
 import java.util.Set;
 import java.util.Vector;
-
-import org.json.JSONArray;
-import org.json.JSONObject;
 
 import com.whalin.MemCached.MemCachedClient;
 import com.whalin.MemCached.SockIOPool;
 import com.yahoo.ycsb.ByteIterator;
-import com.yahoo.ycsb.DB;
 import com.yahoo.ycsb.RandomByteIterator;
 import com.yahoo.ycsb.generator.CounterGenerator;
 
-public class MemcachedClient extends DB {
-	enum Status {
-		SUCCESS(0), FAIL(-1), EXCEPTION(-2);
-		int status;
-
-		private Status(int status) {
-			this.status = status;
-		}
-
-		public int getValue() {
-			return status;
-		}
-	}
-
-	private static final boolean isload;
-	private static final String[] servers;
-	/*
-	private static final String mem_host;
-	private static final String mem_port;
-	private static final String db_host;
-	private static final String db_port;
-	private static final String db_name;
-	private static final String db_url_pref = "jdbc:mysql://";
-	*/
-	
-	private static int read_fail = 0;
-
-	private static final String CONST_STRING;
+public class MemcachedClient extends AbstractClient {
 	private Connection _connection;
 	private MemCachedClient _client;
-	static {
-		try {
-			Properties p = new Properties();
-			p.load(MemcachedClient.class.getClassLoader().getResourceAsStream(
-					"connect.properties"));
-			isload = Boolean.parseBoolean(p.getProperty("isload"));
-			String mem = p.getProperty("memcached");
-
-			JSONArray array = new JSONArray(mem);
-			servers = new String[array.length()];
-			for (int i = 0; i < array.length(); i++) {
-				JSONObject json = new JSONObject(array.getString(i));
-				String mem_host = json.getString("ip");
-				String mem_port = json.getString("port");
-				servers[i] = mem_host + ":" + mem_port;
-			}
-			/*
-			JSONObject json = new JSONObject(mem);
-			mem_host = json.getString("ip");
-			mem_port = json.getString("port");
-
-			String db = p.getProperty("mysql");
-			json = new JSONObject(db);
-			db_host = json.getString("ip");
-			db_port = json.getString("port");
-			db_name = json.getString("dbname");
-
-			char[] chs = new char[4004];
-			for (int i = 0; i < 2025; i++) {
-				chs[i] = 'Y';
-			}
-			CONST_STRING = new String(chs);
-			 */
-			CONST_STRING = "abcd";
-		} catch (Exception e) {
-			throw new RuntimeException("Failed to init app configuration", e);
-		}
-	}
+	private int read_fail = 0;
 
 	@Override
 	public void init() {
-
-		initMySQL();
 		initMemcache();
-		loadData();
+
+		if (isload()) {
+			initMySQL();
+			loadData();
+		}
 	}
 
 	private void initMySQL() {
-		/*if (!isload) {
-			// System.out.println("this time needn't init mysql.");
-		}
-		try {
-			Class.forName("com.mysql.jdbc.Driver");
-			String db_url = db_url_pref + db_host + ":" + db_port + "/"
-					+ db_name;
-			_connection = DriverManager.getConnection(db_url, "root",
-					"c,123456");
-		} catch (ClassNotFoundException e) {
-			e.printStackTrace();
-		} catch (SQLException e) {
-			e.printStackTrace();
-		}*/
+		// try {
+		// Class.forName("com.mysql.jdbc.Driver");
+		// String db_url = db_url_pref + db_host + ":" + db_port + "/"
+		// + db_name;
+		// _connection = DriverManager.getConnection(db_url, "root",
+		// "c,123456");
+		// } catch (ClassNotFoundException e) {
+		// e.printStackTrace();
+		// } catch (SQLException e) {
+		// e.printStackTrace();
+		// }
 	}
 
 	private void initMemcache() {
+		String[] servers = getServers();
 		SockIOPool pool = SockIOPool.getInstance();
 		pool.setServers(servers);
 		pool.initialize();
-		_client = new MemCachedClient(false, true);
-		// System.out.println("init success:");
-		// System.out.println("host:" + mem_host + ", port:" + mem_port);
+		_client = new MemCachedClient(true);
 	}
 
 	private void loadData() {
-		if (!isload) {
-			// System.out.println("this time needn't reload data.");
-			return;
-		}
+
 		Statement s;
 		try {
 			s = _connection.createStatement();
@@ -170,17 +95,18 @@ public class MemcachedClient extends DB {
 		try {
 			String v = get(key);
 			if (v == null) {
-				System.out.println("k:" + key);
+				System.err.println("k:" + key);
 				read_fail++;
+				System.err.println("read_fail:" + read_fail);
 				return Status.FAIL.getValue();
 			}
-			// System.out.println("k:" + key + ", v:" + v);
 			return Status.SUCCESS.getValue();
 		} catch (Exception e) {
 			System.out.println("Error in processing read of key " + table
 					+ ": " + e);
 			return Status.EXCEPTION.getValue();
 		}
+
 	}
 
 	@Override
@@ -200,21 +126,18 @@ public class MemcachedClient extends DB {
 
 		if (_client == null) {
 			System.out.println("the _client is null !!!");
+			return -1;
 		}
-		// System.out.println("key: " + key);
-		// System.out.println("key: " + key.length());
-		// System.out.println("value: " + CONST_STRING);
-		boolean flag = _client.add(key, CONST_STRING);
+		if (_client.get(key) != null) {
+			System.out.println(_client.get(key));
+			return 0;
+		}
+		boolean flag = _client.add(key, getConstString());
+
 		if (!flag) {
 			System.out.println("insert key: " + key + " failed!!!");
 			return -1;
 		}
-		return 0;
-	}
-
-	@Override
-	public int delete(String table, String key) {
-
 		return 0;
 	}
 
@@ -243,7 +166,6 @@ public class MemcachedClient extends DB {
 
 		MemcachedClient mc = new MemcachedClient();
 		mc.init();
-//		System.out.println(mc.get("a"));
 		HashMap<String, ByteIterator> values = new HashMap<String, ByteIterator>();
 
 		for (int i = 0; i < 1; i++) {
