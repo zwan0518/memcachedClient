@@ -1,0 +1,105 @@
+package memcached;
+
+import java.util.HashMap;
+import java.util.Properties;
+import java.util.Set;
+import java.util.Vector;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import com.yahoo.ycsb.ByteIterator;
+import com.yahoo.ycsb.DB;
+
+public abstract class AbstractClient extends DB {
+	public enum Status {
+		SUCCESS(0), FAIL(-1), EXCEPTION(-2);
+		int status;
+
+		private Status(int status) {
+			this.status = status;
+		}
+
+		public int getValue() {
+			return status;
+		}
+	}
+
+	private static final boolean load;
+	private static final boolean big;
+	private static final String[] servers;
+
+	private static final String CONST_STRING;
+	private static final int EXPIRE = 32768;
+	static {
+		try {
+			Properties p = new Properties();
+			p.load(MemcachedDB.class.getClassLoader().getResourceAsStream(
+					"connect.properties"));
+
+			load = Boolean.parseBoolean(p.getProperty("isload"));
+			big = Boolean.parseBoolean("isbig");
+			String mem = p.getProperty("memcached");
+			JSONArray array = new JSONArray(mem);
+			servers = new String[array.length()];
+			for (int i = 0; i < array.length(); i++) {
+				JSONObject json = new JSONObject(array.getString(i));
+				String mem_host = json.getString("ip");
+				String mem_port = json.getString("port");
+				servers[i] = mem_host + ":" + mem_port;
+			}
+
+			if (isBig()) {
+				char[] chs = new char[4004];
+				for (int i = 0; i < 2025; i++) {
+					chs[i] = 'Y';
+				}
+				CONST_STRING = new String(chs);
+			} else {
+				CONST_STRING = "abcd";
+			}
+
+		} catch (Exception e) {
+			throw new RuntimeException("Failed to init app configuration", e);
+		}
+	}
+
+	public static boolean isload() {
+		return load;
+	}
+
+	public static boolean isBig() {
+		return big;
+	}
+
+	public static String[] getServers() {
+		return servers;
+	}
+
+	public static String getConstString() {
+		return CONST_STRING;
+	}
+
+	public static int getExpire() {
+		return EXPIRE;
+	}
+
+	@Override
+	public int scan(String table, String startkey, int recordcount,
+			Set<String> fields, Vector<HashMap<String, ByteIterator>> result) {
+		return 0;
+	}
+
+	@Override
+	public int update(String table, String key,
+			HashMap<String, ByteIterator> values) {
+		return 0;
+	}
+
+	@Override
+	public int delete(String table, String key) {
+
+		return 0;
+	}
+
+}
